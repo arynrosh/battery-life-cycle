@@ -1,0 +1,16 @@
+# data is ~600 MB - never commit it; everyone downloads it (see README)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# training outputs (commit metrics.json / plots selectively if you want them in the report)
+outputs/
+*.pt
+
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+.DS_Store

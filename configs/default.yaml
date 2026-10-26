@@ -1,0 +1,35 @@
+raw_root: data/raw/LG_HG2_data
+processed_path: data/processed/drive_cycles_1hz.parquet
+outputs_dir: outputs
+
+resample_hz: 1.0
+rolling_windows_s: [30, 120, 300]
+
+# Split by whole files (never by random rows: adjacent samples are nearly
+# identical, so a random split leaks and gives fake-good scores).
+split:
+  train: [Mixed1, Mixed2, Mixed3, Mixed4, Mixed5, Mixed6, Mixed7]
+  val:   [Mixed8]
+  test:  [UDDS, HWFET, LA92, US06]
+  temps: [-20, -10, 0, 10, 25, 40]   # ambient temps to include
+
+fnn:
+  hidden: [64, 64, 32]
+  dropout: 0.0
+  lr: 0.001
+  weight_decay: 0.0001
+  batch_size: 512
+  epochs: 60
+  patience: 10
+
+lstm:
+  seq_len: 120        # seconds of history at 1 Hz
+  hidden: 64
+  layers: 2
+  lr: 0.001
+  batch_size: 256
+  epochs: 30
+  patience: 6
+  stride: 2          # subsample training windows to speed up
+
+seed: 42
