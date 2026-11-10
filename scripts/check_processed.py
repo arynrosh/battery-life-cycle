@@ -5,7 +5,8 @@
 
 Checks: missing values, coverage of every temperature x cycle, split sizes,
 1 Hz time-grid gaps, SOC start/end, possible charge steps at the start of a
-run, per-run capacity, and early cell-temperature rise (self-heating).
+run, per-run capacity, early cell-temperature rise (self-heating), value
+ranges, and physically suspicious samples (possible sensor glitches).
 Nothing is written to disk.
 """
 from __future__ import annotations
@@ -104,6 +105,36 @@ def main(cfg_path: str) -> None:
         T_max_mean=("T_max", "mean"),
     )
     print(agg.round(3).to_string())
+
+    # 8. Value outliers: ranges per temperature and physically suspicious samples
+    print("\n== 8. Value ranges per ambient temp (min / 0.1% / 99.9% / max) ==")
+    q = (df.groupby("ambient_c")[["voltage", "current", "temp_c"]]
+           .quantile([0.0, 0.001, 0.999, 1.0]).unstack())
+    q.columns = [f"{c}_{'min' if p == 0 else 'max' if p == 1 else f'p{p*100:g}'}"
+                 for c, p in q.columns]
+    print(q.round(3).to_string())
+
+    # Limits are "worth a look" flags, not proof of bad data.
+    # LG HG2: 4.2 V max charge, 2.0 V absolute discharge floor, 20 A max continuous.
+    run_dt = df.groupby("run_id", sort=False)
+    d_temp = run_dt["temp_c"].diff().abs()
+    d_volt = run_dt["voltage"].diff().abs()
+    d_curr = run_dt["current"].diff().abs()
+    checks = {
+        "voltage > 4.25 V": df.voltage > 4.25,
+        "voltage < 2.0 V": df.voltage < 2.0,
+        "|current| > 20 A": df.current.abs() > 20,
+        "temp_c > ambient + 15 C": df.temp_c > df.ambient_c + 15,
+        "temp_c < ambient - 5 C": df.temp_c < df.ambient_c - 5,
+        "temp jump > 1 C in 1 step": d_temp > 1.0,
+        "voltage jump > 0.3 V with |dI| < 0.5 A": (d_volt > 0.3) & (d_curr < 0.5),
+    }
+    print("\n== 9. Physically suspicious samples (count, runs affected) ==")
+    for name, mask in checks.items():
+        mask = mask.fillna(False)
+        runs = df.loc[mask, "run_id"].unique()
+        shown = ", ".join(runs[:5]) + (" ..." if len(runs) > 5 else "")
+        print(f"  {name:<42} {int(mask.sum()):>6}   {len(runs):>2} runs  {shown}")
 
 
 if __name__ == "__main__":
