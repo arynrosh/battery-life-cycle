@@ -3,8 +3,10 @@
     python scripts/train.py --model linear   # sanity-check baseline
     python scripts/train.py --model fnn      # feed-forward net on V/I/T + rolling means
     python scripts/train.py --model lstm     # LSTM on raw V/I/T sequences
+    python scripts/train.py --model fnn --seed 1   # override seed; writes to outputs/fnn/seed1/
 
-Writes outputs/<model>/{metrics.json, per_run.csv, model.pt, plots/*.png}.
+Writes outputs/<model>/{metrics.json, per_run.csv, model.pt, plots/*.png}
+(or outputs/<model>/seed<N>/... when --seed is given).
 """
 from __future__ import annotations
 
@@ -101,13 +103,19 @@ def main():
     ap.add_argument("--model", choices=["linear", "fnn", "lstm"], default="fnn")
     ap.add_argument("--config", default="configs/default.yaml")
     ap.add_argument("--epochs", type=int, help="override epochs (quick runs)")
+    ap.add_argument("--seed", type=int,
+                    help="override the config seed; results go to <outputs_dir>/<model>/seed<N>/")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(args.config))
-    torch.manual_seed(cfg["seed"])
-    np.random.seed(cfg["seed"])
+    seed = cfg["seed"] if args.seed is None else args.seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
     out_dir = Path(cfg["outputs_dir"]) / args.model
+    if args.seed is not None:
+        out_dir = out_dir / f"seed{args.seed}"
     out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"seed {seed} -> {out_dir}")
 
     data = pd.read_parquet(cfg["processed_path"])
     splits = split_frames(data, cfg["split"])
@@ -152,7 +160,7 @@ def main():
     per_run = per_run_table(test)
     per_run.to_csv(out_dir / "per_run.csv", index=False)
     summary = {
-        "model": args.model, "params": n_params, "train_time_s": round(train_time, 1),
+        "model": args.model, "seed": seed, "params": n_params, "train_time_s": round(train_time, 1),
         "features": cols,
         "val": soc_metrics(Y["val"], preds["val"]),
         "test": soc_metrics(Y["test"], preds["test"]),
