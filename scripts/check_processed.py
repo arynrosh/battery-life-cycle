@@ -17,8 +17,9 @@ import pandas as pd
 import yaml
 
 
-def main(cfg_path: str) -> None:
-    cfg = yaml.safe_load(open(cfg_path))
+def main(cfg_path: str, temps: list[int]) -> None:
+    with open(cfg_path) as f:
+        cfg = yaml.safe_load(f)
     split = cfg["split"]
     step = 1.0 / cfg["resample_hz"]
     df = pd.read_parquet(cfg["processed_path"])
@@ -86,8 +87,8 @@ def main(cfg_path: str) -> None:
         })
     s = pd.DataFrame(rows).set_index("run_id")
 
-    print("\n== 5. Per-run summary: -20, -10 and 25 degC (for comparison) ==")
-    focus = s[s.ambient.isin([-20, -10, 25])].sort_values(["ambient", "cycle"])
+    print(f"\n== 5. Per-run summary: {', '.join(map(str, temps))} degC ==")
+    focus = s[s.ambient.isin(temps)].sort_values(["ambient", "cycle"])
     print(focus.round(3).to_string())
 
     print("\n== 6. Runs that may start with a rest/charge step "
@@ -136,8 +137,28 @@ def main(cfg_path: str) -> None:
         shown = ", ".join(runs[:5]) + (" ..." if len(runs) > 5 else "")
         print(f"  {name:<42} {int(mask.sum()):>6}   {len(runs):>2} runs  {shown}")
 
+    # 10. Label check: capacity per test session. SOC labels divide by cap_ah,
+    # so a session whose capacity is off from the others at the same
+    # temperature mislabels every run in it.
+    print(f"\n== 10. Capacity per test session: {', '.join(map(str, temps))} degC ==")
+    s["session"] = s.index.str.split("_").str[1]
+    sess = (s[s.ambient.isin(temps)]
+            .groupby(["ambient", "session"])
+            .agg(runs=("cycle", "size"),
+                 cycles=("cycle", lambda c: ",".join(sorted(c))),
+                 cap_ah_mean=("cap_ah", "mean"),
+                 cap_ah_min=("cap_ah", "min"),
+                 cap_ah_max=("cap_ah", "max")))
+    temp_mean = s.groupby("ambient")["cap_ah"].mean()
+    sess["vs_temp_mean_%"] = 100 * (sess["cap_ah_mean"]
+                                    / sess.index.get_level_values("ambient").map(temp_mean) - 1)
+    print(sess.round(3).to_string())
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/default.yaml")
-    main(ap.parse_args().config)
+    ap.add_argument("--temps", type=int, nargs="+", default=[-20, -10, 25],
+                    help="ambient temps for the per-run and per-session tables (default: -20 -10 25)")
+    a = ap.parse_args()
+    main(a.config, a.temps)

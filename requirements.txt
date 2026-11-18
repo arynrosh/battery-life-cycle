@@ -1,7 +1,10 @@
-numpy>=1.26
+numpy>=2.0          # notebooks use np.trapezoid (added in 2.0)
 pandas>=2.1
-pyarrow>=14
+pyarrow>=14         # parquet read/write
 scikit-learn>=1.4
 torch>=2.2
 matplotlib>=3.8
 pyyaml>=6
+
+# notebooks (notebooks/*.ipynb)
+ipykernel>=6.29

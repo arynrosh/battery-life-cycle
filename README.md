@@ -102,16 +102,27 @@ protocol of the papers that published this dataset, so our numbers are comparabl
 | model | params | RMSE | MAE | max error | −20 °C RMSE | 25 °C RMSE |
 |---|---|---|---|---|---|---|
 | linear (ridge) | 10 | 6.19% | 4.30% | 39.7% | 13.8% | 3.7% |
-| FNN 64-64-32 | 6.9k | **1.93%** | 1.41% | 18.5% | 3.4% | 1.6% |
+| FNN 64-64-32 | 6.9k | **1.90 ± 0.04%** | 1.39 ± 0.04% | 18.5 ± 0.5% | 3.31 ± 0.06% | 1.55 ± 0.13% |
 | LSTM 2×64 | 51k | not yet run (~90 s/epoch on CPU, so use a GPU or Colab) | | | | |
 
-Numbers come from a single CPU run (seed 42), so expect ±0.2–0.3% between runs.
+Linear: single run (seed 42). FNN: mean ± std over 5 seeds (1, 2, 3, 4, 42); per-seed results in
+`outputs/fnn/seed*/` and `outputs/fnn/seed_summary.csv` (`python scripts/summarize_seeds.py outputs/fnn`).
 
-**What the plots show:** above 0 °C the FNN tracks SOC to within about 1–2% RMSE. Most of the
-remaining error is at **−20 °C in the first ~10 minutes**. There the cell heats itself several
-degrees under load, so its voltage response changes faster than the features capture. After
-the cutoff the cell rests and its voltage relaxes upward, so the model drifts slightly high
-during the final rest period.
+**What the diagnosis notebooks show** (`notebooks/neg_temp_analysis.ipynb` for −20/−10/0 °C,
+`notebooks/pos_temp_analysis.ipynb` for 10/25/40 °C):
+* **Cold (−20 °C)**: most of the error is in the first ~10 minutes. The cell warms ~2 °C under
+  load and its voltage response changes faster than the features capture; the error recovers
+  once it has warmed.
+* **Warm (10–40 °C)**: error is 1.1–2.5% RMSE per run, mostly a small under-prediction.
+* **Near full charge (all temps)**: the FNN under-predicts by ~2–3 pts at 95–100% SOC, on
+  training runs too, so it is a fitting limit rather than poor generalization. This is the
+  "start-up" error; it lasts until the run drops below ~90% SOC, not a fixed time.
+* **Capacity mismatch (all temps)**: every test session's cell capacity is 0.6–2.4% higher than
+  its training sessions' (largest: 10 °C US06, +3.2%), so SOC is under-predicted mid-run.
+  Relabelling with the training capacity removes most of the bias and ~0.25 pt of RMSE at
+  10–40 °C.
+* **Final rest period**: the prediction drifts **up** at −20/−10 °C (voltage relaxes 170–480 mV)
+  but **down** by 0.6–2.8 pts at 10–40 °C, settling at ~3.5% vs a true 5%.
 
 ## Roadmap / ideas for the team
 
